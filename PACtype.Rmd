@@ -1,0 +1,1086 @@
+---
+title: "Cancer type-specific analysis of Physical Activity Using BRFSS, 2018–2024"
+author: "Biruk Demma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+This script analyzes BRFSS 2018–2024 data from states that administered the
+optional cancer type module to:
+
+ 1. Estimate survey-weighted prevalence of physical activity by cancer type.
+ 2. Evaluate temporal trends in physical activity prevalence using annual
+    percentage change (APC).
+ 3. Estimate adjusted prevalence differences in physical activity by cancer type
+    compared with adults without a cancer history.
+
+
+```{r}
+
+#load packages
+pacman::p_load(haven, dplyr, tidyr, tibble, survey, broom, ggplot2, scales, knitr, stringr)
+```
+
+
+BRFSS data Import
+
+ BRFSS data are distributed in multiple release files:
+ - The main file (LLCP2024.XPT) includes all states in the core component.
+ - The V1, V2, and V3 files include separately released state data with different
+   final weight variables.
+
+```{r}
+
+# 2024 DATA
+
+BRFSS_t_24_main <- read_xpt("LLCP2024.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2","_AGE80","_AGE_G","EDUCA","_HLTHPL2","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LLCPWT","_STSTR","_PSU" )) %>%
+  filter(`_STATE` %in% c(9,10,13,18,25,26,29,34,37,46,49,78,51)) %>%
+  mutate(year = 2024)
+
+BRFSS_t_24_v1 <- read_xpt("LLCP24V1.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2", "_AGE80","_AGE_G","EDUCA","_HLTHPL2","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV1","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(4,20)) %>%
+  mutate(year = 2024)
+
+BRFSS_t_24_v2 <- read_xpt("LLCP24V2.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2","_AGE80","_AGE_G","EDUCA","_HLTHPL2","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(31,36)) %>%
+  mutate(year = 2024)
+
+BRFSS_t_2024 <- bind_rows(BRFSS_t_24_main, BRFSS_t_24_v1, BRFSS_t_24_v2)
+
+rm(BRFSS_t_24_main, BRFSS_t_24_v1, BRFSS_t_24_v2)
+```
+
+
+```{r}
+
+# 2023 DATA
+
+BRFSS_t_23_main <- read_xpt("LLCP2023.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2","_PA150R4","_AGE80","_AGE_G","EDUCA","_HLTHPL1","MARITAL",
+                 "PERSDOC3", "_RFSMOK3","_LLCPWT","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(9,13,17,18,26,27,28,33,34,47,78,51,54,55)) %>%
+  mutate(year = 2023)
+
+BRFSS_t_23_v1 <- read_xpt("LLCP23V1.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2","_PA150R4","_AGE80","_AGE_G","EDUCA","_HLTHPL1","MARITAL",
+                 "PERSDOC3", "_RFSMOK3","_LCPWTV1","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(36,40)) %>%
+  mutate(year = 2023)
+
+BRFSS_t_23_v2 <- read_xpt("LLCP23V2.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2","_PA150R4","_AGE80","_AGE_G","EDUCA","_HLTHPL1","MARITAL",
+                 "PERSDOC3","_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(20,24)) %>%
+  mutate(year = 2023)
+
+BRFSS_t_2023 <- bind_rows(BRFSS_t_23_main, BRFSS_t_23_v1, BRFSS_t_23_v2)
+
+rm(BRFSS_t_23_main, BRFSS_t_23_v1, BRFSS_t_23_v2)
+```
+
+
+```{r}
+
+# 2022 DATA
+
+BRFSS_t_22_main <- read_xpt("LLCP2022.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPR1","CHCOCNC1","CNCRTYP2","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LLCPWT","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(5,8,9,10,15,16,17,18,26,29,31,32,34,35,37,41,72,44,46,49,50,51,55)) %>%
+  mutate(year = 2022)
+
+BRFSS_t_22_v1 <- read_xpt("LLCP22V1.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPR1","CHCOCNC1","CNCRTYP2","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV1","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(19,25,39,40)) %>%
+  mutate(year = 2022)
+
+BRFSS_t_22_v2 <- read_xpt("LLCP22V2.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPR1","CHCOCNC1","CNCRTYP2","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(4,20)) %>%
+  mutate(year = 2022)
+
+BRFSS_t_22_v3 <- read_xpt("LLCP22V3.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPR1","CHCOCNC1","CNCRTYP2","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV3","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 24) %>%
+  mutate(year = 2022)
+
+BRFSS_t_2022 <- bind_rows(BRFSS_t_22_main, BRFSS_t_22_v1, BRFSS_t_22_v2, BRFSS_t_22_v3)
+
+rm(BRFSS_t_22_main, BRFSS_t_22_v1, BRFSS_t_22_v2, BRFSS_t_22_v3)
+```
+
+
+```{r}
+
+# 2021 DATA
+
+BRFSS_t_21_main <- read_xpt(
+  "LLCP2021.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LLCPWT","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(5,10,15,26,30,34,35,72,49,55)) %>%
+  mutate(year = 2021)
+
+BRFSS_t_21_v1 <- read_xpt("LLCP21V1.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV1","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(31,40)) %>%
+  mutate(year = 2021)
+
+BRFSS_t_21_v2 <- read_xpt("LLCP21V2.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 20) %>%
+  mutate(year = 2021)
+
+BRFSS_t_21_v3 <- read_xpt("LLCP21V3.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+    "_RFSMOK3","_LCPWTV3","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 24) %>%
+  mutate(year = 2021)
+
+BRFSS_t_2021 <- bind_rows(BRFSS_t_21_main, BRFSS_t_21_v1, BRFSS_t_21_v2, BRFSS_t_21_v3)
+
+rm(BRFSS_t_21_main, BRFSS_t_21_v1, BRFSS_t_21_v2, BRFSS_t_21_v3)
+```
+
+
+```{r}
+
+# 2020 DATA
+
+BRFSS_t_20_main <- read_xpt("LLCP2020.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LLCPWT","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(4,9,10,13,66,15,18,22,25,26,28,29,30,34,35,37,44,46,49,50,51,55)) %>%
+  mutate(year = 2020)
+
+BRFSS_t_20_v1 <- read_xpt("LLCP20V1.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LCPWTV1","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(20,23,31,36,39,40)) %>%
+  mutate(year = 2020)
+
+BRFSS_t_20_v2 <- read_xpt("LLCP20V2.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 24) %>%
+  mutate(year = 2020)
+
+BRFSS_t_20_v3 <- read_xpt("LLCP20V3.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LCPWTV3","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 36) %>%
+  mutate(year = 2020)
+
+BRFSS_t_2020 <- bind_rows(BRFSS_t_20_main, BRFSS_t_20_v1, BRFSS_t_20_v2, BRFSS_t_20_v3)
+
+rm(BRFSS_t_20_main, BRFSS_t_20_v1, BRFSS_t_20_v2, BRFSS_t_20_v3)
+```
+
+
+```{r}
+
+# 2019 DATA
+
+BRFSS_t_19_main <- read_xpt("LLCP2019.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACE","CHCOCNCR","CNCRTYP1","_PA150R3","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LLCPWT","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 56) %>%
+  mutate(year = 2019)
+
+BRFSS_t_19_v2 <- read_xpt("LLCP19V2.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACE","CHCOCNCR","CNCRTYP1","_PA150R3","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(24,25)) %>%
+  mutate(year = 2019)
+
+BRFSS_t_2019 <- bind_rows(BRFSS_t_19_main, BRFSS_t_19_v2)
+
+rm(BRFSS_t_19_main, BRFSS_t_19_v2)
+```
+
+
+```{r}
+
+# 2018 DATA
+
+BRFSS_t_18_main <- read_xpt("LLCP2018.XPT",
+  col_select = c("_STATE","SEX1","EXERANY2","_RACE","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LLCPWT","_STSTR","_PSU")) %>%
+  filter(`_STATE` %in% c(10,18,26,29,34,46)) %>%
+  mutate(year = 2018)
+
+BRFSS_t_18_v2 <- read_xpt("LLCP18V2.XPT",
+  col_select = c("_STATE","SEX1","EXERANY2","_RACE","CHCOCNCR","CNCRTYP1","_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+    "_RFSMOK3","_LCPWTV2","_STSTR","_PSU")) %>%
+  filter(`_STATE` == 20) %>%
+  mutate(year = 2018)
+
+BRFSS_t_2018 <- bind_rows(BRFSS_t_18_main, BRFSS_t_18_v2)
+
+rm(BRFSS_t_18_main, BRFSS_t_18_v2)
+```
+
+
+```{r}
+
+# Stacked annual datasets
+
+BRFSS_t <- bind_rows( BRFSS_t_2018, BRFSS_t_2019, BRFSS_t_2020, BRFSS_t_2021, BRFSS_t_2022, BRFSS_t_2023, BRFSS_t_2024)
+
+rm(BRFSS_t_2018, BRFSS_t_2019, BRFSS_t_2020, BRFSS_t_2021, BRFSS_t_2022, BRFSS_t_2023, BRFSS_t_2024)
+```
+
+
+
+# Weight Consolidation
+
+```{r}
+
+# Identify the BRFSS release file for each record and create a single final weight variable
+# that harmonizes the file-specific weight variables across main, V1, V2, and V3 releases.
+
+BRFSS_t <- BRFSS_t %>%
+  dplyr::mutate(
+    version = dplyr::case_when(
+      !is.na(`_LLCPWT`)  ~ "main",
+      !is.na(`_LCPWTV1`) ~ "v1",
+      !is.na(`_LCPWTV2`) ~ "v2",
+      !is.na(`_LCPWTV3`) ~ "v3",
+      TRUE ~ NA_character_),
+    
+    WEIGHT = dplyr::coalesce(`_LLCPWT`, `_LCPWTV1`, `_LCPWTV2`, `_LCPWTV3`)) %>%
+    dplyr::mutate(year = as.integer(year),
+               version = factor(version, levels = c("main","v1","v2","v3")))
+```
+
+
+```{r}
+
+# Diagnostic check: 
+# Identify any state-year combinations that appear in more than one BRFSS_t release version (main/v1/v2/v3). 
+# If any are found, those state-years require weight adjustments.
+
+BRFSS_t %>%
+  dplyr::filter(!is.na(version)) %>%
+  dplyr::distinct(year, `_STATE`, version) %>%
+  dplyr::count(year, `_STATE`, name = "n_versions") %>%
+  dplyr::filter(n_versions > 1) %>%
+  dplyr::arrange(year, `_STATE`)
+```
+
+
+```{r}
+
+# For State 36 (NY) in 2020 only: compute N’s and rescale weights for v1 vs v3 proportionally.
+
+NYn2020 <- BRFSS_t %>%
+  dplyr::filter(year == 2020, `_STATE` == 36, version %in% c("v1","v3")) %>%
+  dplyr::count(version, name = "n") %>%
+  tidyr::pivot_wider(names_from = version, values_from = n, values_fill = 0)
+
+N1 <- as.numeric(NYn2020$v1)
+N3 <- as.numeric(NYn2020$v3)
+P1 <- N1 / (N1 + N3)
+P3 <- N3 / (N1 + N3)
+
+BRFSS_t <- BRFSS_t %>%
+  dplyr::mutate( WEIGHT = dplyr::case_when(
+      year == 2020 & `_STATE` == 36 & version == "v1" ~ WEIGHT * P1,
+      year == 2020 & `_STATE` == 36 & version == "v3" ~ WEIGHT * P3,
+      TRUE ~ WEIGHT))
+NYn2020
+P1
+P3
+```
+
+```{r}
+
+# Harmonization
+
+BRFSS_t <- BRFSS_t %>%
+  dplyr::mutate(
+    year_num = as.integer(year),
+
+    
+    # STATE
+    State = dplyr::case_when(
+      `_STATE` == 1  ~ "Alabama", `_STATE` == 2  ~ "Alaska", `_STATE` == 4  ~ "Arizona",
+      `_STATE` == 5  ~ "Arkansas", `_STATE` == 6  ~ "California", `_STATE` == 8  ~ "Colorado",
+      `_STATE` == 9  ~ "Connecticut", `_STATE` == 10 ~ "Delaware", `_STATE` == 11 ~ "District of Columbia",
+      `_STATE` == 12 ~ "Florida", `_STATE` == 13 ~ "Georgia", `_STATE` == 15 ~ "Hawaii",
+      `_STATE` == 16 ~ "Idaho", `_STATE` == 17 ~ "Illinois", `_STATE` == 18 ~ "Indiana",
+      `_STATE` == 19 ~ "Iowa", `_STATE` == 20 ~ "Kansas", `_STATE` == 21 ~ "Kentucky",
+      `_STATE` == 22 ~ "Louisiana", `_STATE` == 23 ~ "Maine", `_STATE` == 24 ~ "Maryland",
+      `_STATE` == 25 ~ "Massachusetts", `_STATE` == 26 ~ "Michigan", `_STATE` == 27 ~ "Minnesota",
+      `_STATE` == 28 ~ "Mississippi", `_STATE` == 29 ~ "Missouri", `_STATE` == 30 ~ "Montana",
+      `_STATE` == 31 ~ "Nebraska", `_STATE` == 32 ~ "Nevada", `_STATE` == 33 ~ "New Hampshire",
+      `_STATE` == 34 ~ "New Jersey", `_STATE` == 35 ~ "New Mexico", `_STATE` == 36 ~ "New York",
+      `_STATE` == 37 ~ "North Carolina", `_STATE` == 38 ~ "North Dakota", `_STATE` == 39 ~ "Ohio",
+      `_STATE` == 40 ~ "Oklahoma", `_STATE` == 41 ~ "Oregon", `_STATE` == 42 ~ "Pennsylvania",
+      `_STATE` == 44 ~ "Rhode Island", `_STATE` == 45 ~ "South Carolina", `_STATE` == 46 ~ "South Dakota",
+      `_STATE` == 47 ~ "Tennessee", `_STATE` == 48 ~ "Texas", `_STATE` == 49 ~ "Utah",
+      `_STATE` == 50 ~ "Vermont", `_STATE` == 51 ~ "Virginia", `_STATE` == 53 ~ "Washington",
+      `_STATE` == 54 ~ "West Virginia", `_STATE` == 55 ~ "Wisconsin", `_STATE` == 56 ~ "Wyoming",
+      `_STATE` == 60 ~ "American Samoa", `_STATE` == 66 ~ "Guam", `_STATE` == 69 ~ "Northern Mariana Islands",
+      `_STATE` == 72 ~ "Puerto Rico", `_STATE` == 78 ~ "U.S. Virgin Islands",
+      TRUE ~ NA_character_
+    ),
+    State = factor(State),
+
+    
+    # Sex
+    sex = dplyr::case_when(
+      year_num == 2018 & SEX1   == 1 ~ "Male",
+      year_num == 2018 & SEX1   == 2 ~ "Female",
+      year_num >= 2019 & SEXVAR == 1 ~ "Male",
+      year_num >= 2019 & SEXVAR == 2 ~ "Female",
+      TRUE ~ NA_character_
+    ),
+    sex = factor(sex, levels = c("Male", "Female")),
+
+    
+    # Age
+    age = `_AGE80`,
+    age_categorical = cut(
+      `_AGE80`,
+      breaks = c(-Inf, 49, 59, 69, 79, Inf),
+      labels = c("<50", "50–59", "60–69", "70–79", "80+"),
+      right  = TRUE
+    ),
+    age_categorical = factor(
+      age_categorical,
+      levels  = c("<50", "50–59", "60–69", "70–79", "80+"),
+      ordered = TRUE
+    ),
+
+    
+    # Race / Ethnicity
+    race_source = dplyr::case_when(
+      !is.na(`_RACE`)    ~ "RACE",
+      !is.na(`_RACEPRV`) ~ "RACEPRV",
+      !is.na(`_RACEPR1`) ~ "RACEPR1",
+      TRUE ~ NA_character_
+    ),
+    race_code = dplyr::case_when(
+      race_source == "RACE"    ~ as.character(`_RACE`),
+      race_source == "RACEPRV" ~ as.character(`_RACEPRV`),
+      race_source == "RACEPR1" ~ as.character(`_RACEPR1`),
+      TRUE ~ NA_character_
+    ),
+    race_ethnicity = dplyr::case_when(
+      race_code == "1" ~ "Non-Hispanic White",
+      race_code == "2" ~ "Non-Hispanic Black",
+      race_code == "3" ~ "Non-Hispanic American Indian/Alaska Native",
+      race_code == "4" ~ "Non-Hispanic Asian",
+      race_code == "5" ~ "Non-Hispanic Asian Pacific Islander",
+      race_source %in% c("RACE", "RACEPRV") & race_code %in% c("6", "7") ~ "Non-Hispanic Other/Multiracial",
+      race_source == "RACEPR1" & race_code == "6"                       ~ "Non-Hispanic Other/Multiracial",
+      race_source %in% c("RACE", "RACEPRV") & race_code == "8"          ~ "Hispanic",
+      race_source == "RACEPR1" & race_code == "7"                       ~ "Hispanic",
+      TRUE ~ NA_character_
+    ),
+    race_ethnicity = factor(
+      race_ethnicity,
+      levels = c(
+        "Non-Hispanic White", "Non-Hispanic Black",
+        "Non-Hispanic American Indian/Alaska Native",
+        "Non-Hispanic Asian", "Non-Hispanic Asian Pacific Islander",
+        "Non-Hispanic Other/Multiracial", "Hispanic"
+      )
+    ),
+
+    
+    # Education
+    education = dplyr::case_when(
+      EDUCA %in% c(1, 2, 3) ~ "< High school",
+      EDUCA == 4            ~ "High school or GED",
+      EDUCA == 5            ~ "Some college",
+      EDUCA == 6            ~ "College or more",
+      TRUE ~ NA_character_
+    ),
+    education = factor(
+      education,
+      levels = c("< High school", "High school or GED", "Some college", "College or more")
+    ),
+
+    
+    # Insurance
+    insurance_raw = dplyr::coalesce(`_HLTHPL2`, `_HLTHPL1`, `_HLTHPLN`, HLTHPLN1),
+    insurance = dplyr::case_when(
+      insurance_raw == 1 ~ "Insured",
+      insurance_raw == 2 ~ "No insurance",
+      TRUE ~ NA_character_
+    ),
+    insurance = factor(insurance, levels = c("Insured", "No insurance")),
+
+    
+    # Personal Health Care Provider
+    PHC_provider = dplyr::case_when(
+      year_num %in% 2018:2020 & PERSDOC2 %in% c(1, 2) ~ "Yes",
+      year_num %in% 2018:2020 & PERSDOC2 == 3         ~ "No",
+      year_num %in% 2021:2024 & PERSDOC3 %in% c(1, 2) ~ "Yes",
+      year_num %in% 2021:2024 & PERSDOC3 == 3         ~ "No",
+      TRUE ~ NA_character_
+    ),
+    PHC_provider = factor(PHC_provider, levels = c("Yes", "No")),
+
+    
+    # Marital Status 
+    marital_status = dplyr::case_when(
+      MARITAL == 1              ~ "Married",
+      MARITAL %in% c(2, 3, 4, 5, 6) ~ "Unmarried",
+      TRUE ~ NA_character_
+    ),
+    marital_status = factor(marital_status, levels = c("Married", "Unmarried")),
+
+    
+    # Smoking
+    smoking_status = dplyr::case_when(
+      `_RFSMOK3` == 2 ~ "Current smoker",
+      `_RFSMOK3` == 1 ~ "Not current smoker",
+      TRUE ~ NA_character_
+    ),
+    smoking_status = factor(smoking_status, levels = c("Not current smoker", "Current smoker")),
+
+    
+    # Physical Activity 
+    physical_activity = dplyr::case_when(
+      EXERANY2 %in% c(7, 9) ~ NA_real_,
+      EXERANY2 == 1 ~ 1,
+      EXERANY2 == 2 ~ 0,
+      TRUE ~ NA_real_
+    ),
+
+    
+    # Cancer History
+    CHCOCNCR = dplyr::if_else(CHCOCNCR %in% c(7, 9), NA_real_, as.numeric(CHCOCNCR)),
+    CHCOCNC1 = dplyr::if_else(CHCOCNC1 %in% c(7, 9), NA_real_, as.numeric(CHCOCNC1)),
+    cancer_history = dplyr::case_when(
+      year_num %in% 2018:2021 & CHCOCNCR == 1 ~ "Yes",
+      year_num %in% 2018:2021 & CHCOCNCR == 2 ~ "No",
+      year_num %in% 2022:2024 & CHCOCNC1 == 1 ~ "Yes",
+      year_num %in% 2022:2024 & CHCOCNC1 == 2 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    cancer_history = factor(cancer_history, levels = c("No", "Yes")),
+
+    
+    # Cancer type 
+    CNCRTYP1 = dplyr::if_else(CNCRTYP1 %in% c(77, 99), NA_real_, as.numeric(CNCRTYP1)),
+    CNCRTYP2 = dplyr::if_else(CNCRTYP2 %in% c(77, 99), NA_real_, as.numeric(CNCRTYP2)),
+    
+    cancer_type = dplyr::case_when(
+
+    # Breast
+    cancer_history == "Yes" & year_num %in% 2018:2021 & CNCRTYP1 == 1  & sex == "Female" ~ "Breast cancer",
+    cancer_history == "Yes" & year_num %in% 2022:2024 & CNCRTYP2 == 5  & sex == "Female" ~ "Breast cancer",
+  
+    # Prostate
+    cancer_history == "Yes" & year_num %in% 2018:2021 & CNCRTYP1 == 19 & sex == "Male"   ~ "Prostate cancer",
+    cancer_history == "Yes" & year_num %in% 2022:2024 & CNCRTYP2 == 20 & sex == "Male"   ~ "Prostate cancer",
+  
+    # Colon
+    cancer_history == "Yes" & year_num %in% 2018:2021 & CNCRTYP1 == 10 ~ "Colon cancer",
+    cancer_history == "Yes" & year_num %in% 2022:2024 & CNCRTYP2 == 7  ~ "Colon cancer",
+  
+    # Other (valid sites excluding the above)
+    cancer_history == "Yes" & year_num %in% 2018:2021 & CNCRTYP1 %in% 1:30 & !CNCRTYP1 %in% c(1,10,19) ~ "Other cancer",
+    cancer_history == "Yes" & year_num %in% 2022:2024 & CNCRTYP2 %in% 1:30 & !CNCRTYP2 %in% c(5,7,20)  ~ "Other cancer",
+  
+    TRUE ~ NA_character_
+  ),
+    
+    cancer_type = factor( cancer_type, levels = c("Breast cancer", "Colon cancer", "Prostate cancer", "Other cancer"))
+   )%>%
+  dplyr::select(-race_source, -race_code, -insurance_raw)
+```
+
+
+
+```{r}
+# Rename survey design variables for consistency across analyses
+BRFSS_t <- BRFSS_t %>%
+  dplyr::rename(STRATA = `_STSTR`, PSU = `_PSU`)
+```
+
+
+
+```{r}
+
+# Build analytic dataset for cancer type-specific comparisons
+# (adults with a given cancer type vs adults with no cancer history)
+analytic_type <- BRFSS_t %>%
+  
+  # Keep only people with known cancer history (drop missing Yes/No)
+  dplyr::filter(!is.na(cancer_history)) %>%
+  
+  # For respondents without a cancer history, retain all records.
+  # For respondents with a cancer history, retain only those with non-missing cancer type.
+   dplyr::filter(cancer_history == "No" | (cancer_history == "Yes" & !is.na(cancer_type))) %>%
+  
+  # Restrict to complete cases for variables used in survey-weighted estimates and models
+  tidyr::drop_na(physical_activity,age_categorical,sex, race_ethnicity,education, insurance,
+                 PHC_provider, marital_status, smoking_status, year,WEIGHT, STRATA, PSU)
+
+nrow(analytic_type)
+```
+
+
+# diagnostic checks for cancer type availability
+
+
+```{r}
+
+# Summarize missingness across key analytic variables
+# For cancer type, missingness is calculated only among respondents with a
+# cancer history because cancer type is only defined in that group.
+# For all other variables, missingness is calculated across the pooled dataset.
+
+
+#(Supplementary table 3B)
+
+tibble::tibble(
+  Variable = c(
+    "Cancer type (among cancer history = Yes only)",
+    "Smoking status",
+    "Insurance",
+    "Marital status",
+    "Personal health care provider",
+    "Education",
+    "Physical activity",
+    "Race/Ethnicity",
+    "Sex",
+    "Age group",
+    "Year",
+    "WEIGHT",
+    "STRATA",
+    "PSU"
+  ),
+  Total_n = nrow(BRFSS_t),
+  N_missing = c(
+    sum(BRFSS_t$cancer_history == "Yes" & is.na(BRFSS_t$cancer_type), na.rm = TRUE),
+
+    sum(is.na(BRFSS_t$smoking_status)),
+    sum(is.na(BRFSS_t$insurance)),
+    sum(is.na(BRFSS_t$marital_status)),
+    sum(is.na(BRFSS_t$PHC_provider)),
+    sum(is.na(BRFSS_t$education)),
+    sum(is.na(BRFSS_t$physical_activity)),
+    sum(is.na(BRFSS_t$race_ethnicity)),
+    sum(is.na(BRFSS_t$sex)),
+    sum(is.na(BRFSS_t$age_categorical)),
+    sum(is.na(BRFSS_t$year)),
+    sum(is.na(BRFSS_t$WEIGHT)),
+    sum(is.na(BRFSS_t$STRATA)),
+    sum(is.na(BRFSS_t$PSU))
+  )
+) %>%
+  dplyr::mutate(
+    pct_missing = round(100 * N_missing / Total_n, 2)
+  ) %>%
+  dplyr::arrange(dplyr::desc(pct_missing))
+```
+
+
+```{r}
+
+# Missing cancer type by cancer history
+
+BRFSS_t %>%
+  dplyr::count(cancer_history, is.na(cancer_type), name = "n") %>%
+  dplyr::arrange(cancer_history, desc(`is.na(cancer_type)`))
+```
+
+
+```{r}
+
+# Missing cancer type by year/version/state
+
+BRFSS_t %>%
+  dplyr::filter(cancer_history == "Yes", is.na(cancer_type)) %>%
+  dplyr::count(year, version, `_STATE`, sort = TRUE)
+```
+
+
+```{r}
+
+# Distribution of cancer types among respondents with non-missing cancer type 
+# (included in table one)
+
+BRFSS_t %>%
+  dplyr::filter(cancer_history == "Yes", !is.na(cancer_type)) %>%
+  dplyr::count(cancer_type, name = "n") %>%
+  dplyr::mutate(
+    pct = round(100 * n / sum(n), 1),
+    `Cancer Type` = as.character(cancer_type)
+  ) %>%
+  dplyr::select(`Cancer Type`, n, pct) %>%
+  dplyr::arrange(match(`Cancer Type`, c("Breast cancer", "Prostate cancer", "Colon cancer", "Other cancer"))) %>%
+  tibble::as_tibble()
+```
+
+
+```{r}
+
+# missing cancer type by year/version/state
+
+BRFSS_t %>%
+  dplyr::filter(cancer_history == "Yes") %>%
+  dplyr::count(cancer_type, name = "n") %>%
+  dplyr::arrange(dplyr::desc(n))
+```
+
+
+
+```{r}
+
+# Create survey design objects for cancer type-specific prevalence analyses
+# Add factor-coded survey year, numeric year, and pooled year-specific PSU and
+# strata identifiers for use in survey-weighted estimation across years.
+
+analytic_type <- analytic_type %>%
+  dplyr::mutate(
+    year          = factor(year, levels = 2018:2024),
+    year_num      = as.integer(as.character(year)),
+    cancer_type   = factor(cancer_type,
+                    levels = c("Breast cancer", "Colon cancer", "Prostate cancer", "Other cancer")),
+    
+    # Create unique strata IDs
+    
+    # BRFSS strata and PSU codes are assigned independently each year, so the same
+    # numeric code can appear across years but refer to different design elements.
+    # Interacting year with STRATA and PSU creates unique identifiers that prevent
+    # the survey package from incorrectly treating codes from different years as the
+    # same stratum or PSU in the pooled design.
+    
+    unique_strata = interaction(year, STRATA),
+    unique_psu    = interaction(year, PSU)
+  )
+
+options(survey.lonely.psu = "adjust")
+
+des_all <- survey::svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata,
+  weights = ~WEIGHT,
+  data    = analytic_type,
+  nest    = TRUE
+)
+
+# Cancer-type designs (with cancer history)
+des_breast   <- subset(des_all, cancer_history == "Yes" & cancer_type == "Breast cancer"   & sex == "Female")
+des_prostate <- subset(des_all, cancer_history == "Yes" & cancer_type == "Prostate cancer" & sex == "Male")
+des_colon    <- subset(des_all, cancer_history == "Yes" & cancer_type == "Colon cancer")
+des_other    <- subset(des_all, cancer_history == "Yes" & cancer_type == "Other cancer")
+
+# Reference designs (no cancer history)
+des_ref_female <- subset(des_all, cancer_history == "No" & sex == "Female")
+des_ref_male   <- subset(des_all, cancer_history == "No" & sex == "Male")
+des_ref_all    <- subset(des_all, cancer_history == "No")
+```
+
+
+```{r}
+
+# Estimate annual weighted prevalence of physical activity by cancer type
+# Calculate annual survey-weighted prevalence and 95% confidence intervals for
+# each cancer type and for the corresponding no-cancer reference groups.
+
+
+# Weighted prevalence by year for each cancer type
+prev_breast <- survey::svyby(~physical_activity, ~year, des_breast,   
+                              survey::svymean, vartype = "ci", na.rm = TRUE)
+prev_prost  <- survey::svyby(~physical_activity, ~year, des_prostate, 
+                              survey::svymean, vartype = "ci", na.rm = TRUE)
+prev_colon  <- survey::svyby(~physical_activity, ~year, des_colon,    
+                              survey::svymean, vartype = "ci", na.rm = TRUE)
+prev_other  <- survey::svyby(~physical_activity, ~year, des_other,    
+                              survey::svymean, vartype = "ci", na.rm = TRUE)
+
+# Reference group prevalences
+prev_ref_female <- survey::svyby(~physical_activity, ~year, des_ref_female, 
+                                  survey::svymean, vartype = "ci", na.rm = TRUE)
+prev_ref_male   <- survey::svyby(~physical_activity, ~year, des_ref_male,   
+                                  survey::svymean, vartype = "ci", na.rm = TRUE)
+prev_ref_all    <- survey::svyby(~physical_activity, ~year, des_ref_all,    
+                                  survey::svymean, vartype = "ci", na.rm = TRUE)
+
+```
+
+
+```{r}
+
+# This object stacks the yearly prevalence estimates for breast, prostate,
+# colon, and other cancers for summary and reporting.
+
+
+# Included inn supplementary table 4.
+
+prev_all_types <- dplyr::bind_rows(
+  tibble::as_tibble(prev_breast) %>% dplyr::mutate(cancer_type = "Breast cancer"),
+  tibble::as_tibble(prev_prost)  %>% dplyr::mutate(cancer_type = "Prostate cancer"),
+  tibble::as_tibble(prev_colon)  %>% dplyr::mutate(cancer_type = "Colon cancer"),
+  tibble::as_tibble(prev_other)  %>% dplyr::mutate(cancer_type = "Other cancer")) %>%
+  dplyr::select(cancer_type, year, physical_activity, ci_l, ci_u)
+
+prev_all_types
+```
+
+
+
+
+```{r}
+
+# Estimate annual percentage change (APC) by cancer type
+# Add numeric survey year to each annual prevalence object, fit log-linear models
+# to the annual weighted prevalence estimates, and convert the year coefficient
+# to APC with 95% confidence intervals.
+
+# Output included in table 2.
+
+# Add year_num to each prevalence object
+add_year_num <- function(df) {
+  df %>% dplyr::mutate(year_num = as.integer(as.character(year)))
+}
+
+prev_breast <- add_year_num(prev_breast)
+prev_prost  <- add_year_num(prev_prost)
+prev_colon  <- add_year_num(prev_colon)
+prev_other  <- add_year_num(prev_other)
+
+# Log-linear APC models on annual weighted prevalences
+lm_breast   <- lm(log(physical_activity) ~ year_num, data = prev_breast)
+lm_prostate <- lm(log(physical_activity) ~ year_num, data = prev_prost)
+lm_colon    <- lm(log(physical_activity) ~ year_num, data = prev_colon)
+lm_other    <- lm(log(physical_activity) ~ year_num, data = prev_other)
+
+# Extract APC with 95% CIs
+get_apc <- function(fit, label) {
+  broom::tidy(fit, conf.int = TRUE) %>%
+    dplyr::filter(term == "year_num") %>%
+    dplyr::transmute(
+      group       = label,
+      APC_pct     = round((exp(estimate) - 1) * 100, 2),
+      ci_low_pct  = round((exp(conf.low) - 1) * 100, 2),
+      ci_high_pct = round((exp(conf.high) - 1) * 100, 2),
+      p_value     = p.value
+    )
+}
+
+apc_type_results <- dplyr::bind_rows(
+  get_apc(lm_breast,   "Breast cancer"),
+  get_apc(lm_prostate, "Prostate cancer"),
+  get_apc(lm_colon,    "Colon cancer"),
+  get_apc(lm_other,    "Other cancer")
+)
+
+apc_type_results
+```
+
+
+Create analytic datasets for adjusted prevalence difference analyses
+
+```{r}
+
+# For each cancer type, create a comparison dataset that includes:
+# - adults without a cancer history as the reference group
+# - adults with the specified cancer type as the comparison group
+# Breast cancer is restricted to females and prostate cancer is restricted to males.
+
+dat_breast_pd <- analytic_type %>%
+  dplyr::filter(
+    sex == "Female",
+    cancer_history == "No" | (cancer_history == "Yes" & cancer_type == "Breast cancer")
+  ) %>%
+  dplyr::mutate(
+    group = factor(
+      ifelse(cancer_history == "No", "No cancer history", "Breast cancer"),
+      levels = c("No cancer history", "Breast cancer")
+    )
+  )
+
+dat_prostate_pd <- analytic_type %>%
+  dplyr::filter(
+    sex == "Male",
+    cancer_history == "No" | (cancer_history == "Yes" & cancer_type == "Prostate cancer")
+  ) %>%
+  dplyr::mutate(
+    group = factor(
+      ifelse(cancer_history == "No", "No cancer history", "Prostate cancer"),
+      levels = c("No cancer history", "Prostate cancer")
+    )
+  )
+
+dat_colon_pd <- analytic_type %>%
+  dplyr::filter(
+    cancer_history == "No" | (cancer_history == "Yes" & cancer_type == "Colon cancer")
+  ) %>%
+  dplyr::mutate(
+    group = factor(
+      ifelse(cancer_history == "No", "No cancer history", "Colon cancer"),
+      levels = c("No cancer history", "Colon cancer")
+    )
+  )
+
+dat_other_pd <- analytic_type %>%
+  dplyr::filter(
+    cancer_history == "No" | (cancer_history == "Yes" & cancer_type == "Other cancer")
+  ) %>%
+  dplyr::mutate(
+    group = factor(
+      ifelse(cancer_history == "No", "No cancer history", "Other cancer"),
+      levels = c("No cancer history", "Other cancer")
+    )
+  )
+```
+
+
+```{r}
+
+# Create survey design objects for adjusted prevalence difference analyses
+# Construct survey design objects for each cancer type-specific comparison
+# using the year-specific PSU and strata identifiers.
+
+options(survey.lonely.psu = "adjust")
+
+des_breast_pd <- survey::svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata,
+  weights = ~WEIGHT,
+  data    = dat_breast_pd,
+  nest    = TRUE
+)
+
+des_prostate_pd <- survey::svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata,
+  weights = ~WEIGHT,
+  data    = dat_prostate_pd,
+  nest    = TRUE
+)
+
+des_colon_pd <- survey::svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata,
+  weights = ~WEIGHT,
+  data    = dat_colon_pd,
+  nest    = TRUE
+)
+
+des_other_pd <- survey::svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata,
+  weights = ~WEIGHT,
+  data    = dat_other_pd,
+  nest    = TRUE
+)
+```
+
+
+```{r}
+
+# Fit adjusted linear probability models for each cancer type comparison
+# These models estimate adjusted prevalence differences in physical activity
+# between each cancer type group and adults without a cancer history.
+# Sex is included only in the colon and other-cancer models because those
+# comparisons include both males and females
+
+m_breast <- survey::svyglm(
+  physical_activity ~ group + year + age_categorical + race_ethnicity +
+    education + insurance + PHC_provider + marital_status + smoking_status,
+  design = des_breast_pd,
+  family = gaussian(link = "identity")
+)
+
+m_prostate <- survey::svyglm(
+  physical_activity ~ group + year + age_categorical + race_ethnicity +
+    education + insurance + PHC_provider + marital_status + smoking_status,
+  design = des_prostate_pd,
+  family = gaussian(link = "identity")
+)
+
+m_colon <- survey::svyglm(
+  physical_activity ~ group + year + sex + age_categorical + race_ethnicity +
+    education + insurance + PHC_provider + marital_status + smoking_status,
+  design = des_colon_pd,
+  family = gaussian(link = "identity")
+)
+
+m_other <- survey::svyglm(
+  physical_activity ~ group + year + sex + age_categorical + race_ethnicity +
+    education + insurance + PHC_provider + marital_status + smoking_status,
+  design = des_other_pd,
+  family = gaussian(link = "identity")
+)
+```
+
+
+```{r}
+
+# Extract adjusted prevalence difference estimates
+# Extract the adjusted prevalence difference for each cancer type comparison
+# and report results in percentage points with 95% confidence intervals
+
+
+# Output included in supplementary table 5.
+
+get_apd <- function(fit, label) {
+  broom::tidy(fit, conf.int = TRUE) %>%
+    dplyr::filter(grepl("group", term)) %>%
+    dplyr::transmute(
+      comparison = label,
+      aPD_pp     = round(estimate * 100, 1),
+      ci_low_pp  = round(conf.low * 100, 1),
+      ci_high_pp = round(conf.high * 100, 1),
+      p_value    = p.value
+    )
+}
+
+apd_type_results <- dplyr::bind_rows(
+  get_apd(m_breast,   "Breast cancer"),
+  get_apd(m_prostate, "Prostate cancer"),
+  get_apd(m_colon,    "Colon cancer"),
+  get_apd(m_other,    "Other cancer")
+)
+
+apd_type_results
+```
+
+
+```{r}
+
+# Prepare weighted prevalence estimates for plotting
+# Convert each prevalence object into a consistent data frame with year,
+# group label, prevalence estimate, and confidence interval limits.
+
+# Helper function to prepare prevalence data for plotting
+prep_prev <- function(prev_obj, label) {
+  tibble::as_tibble(prev_obj) %>%
+    dplyr::transmute(
+      year    = as.integer(as.character(year)),
+      group   = label,
+      prev    = physical_activity,
+      ci_low  = ci_l,
+      ci_high = ci_u
+    )
+}
+
+# Combine cancer type and reference group for each plot
+
+# Combine each cancer type with its corresponding reference group
+# Breast cancer is compared with females without a cancer history.
+# Prostate cancer is compared with males without a cancer history.
+# Colon cancer and other cancers are compared with all adults without a cancer history.
+
+plot_breast_df   <- dplyr::bind_rows(prep_prev(prev_breast, "Breast cancer"),   prep_prev(prev_ref_female, "No cancer history"))
+plot_prostate_df <- dplyr::bind_rows(prep_prev(prev_prost,  "Prostate cancer"),  prep_prev(prev_ref_male,   "No cancer history"))
+plot_colon_df    <- dplyr::bind_rows(prep_prev(prev_colon,  "Colon cancer"),     prep_prev(prev_ref_all,    "No cancer history"))
+plot_other_df    <- dplyr::bind_rows(prep_prev(prev_other,  "Other cancers"),     prep_prev(prev_ref_all,    "No cancer history"))
+
+
+# Define plotting function
+# This function plots annual weighted prevalence of physical activity with
+# 95% confidence intervals for the cancer type group and the reference group.
+
+plot_prev <- function(df) {
+  ggplot(df, aes(x = year, y = prev * 100, group = group)) +
+    geom_errorbar(aes(ymin = ci_low * 100, ymax = ci_high * 100),
+                  width = 0.15, linewidth = 0.45) +
+    geom_line(aes(linetype = group), linewidth = 0.9) +
+    geom_point(aes(shape = group), size = 2.5, fill = "white", stroke = 0.8) +
+    scale_x_continuous(breaks = 2018:2024) +
+    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10),
+                       expand = expansion(mult = c(0, 0.02))) +
+    labs(x = "Survey year",
+         y = "Weighted prevalence of PA (%)",
+         linetype = NULL, shape = NULL) +
+    theme_classic(base_size = 12) +
+    theme(
+      axis.text       = element_text(color = "black"),
+      legend.text      = element_text(size = 14),
+      legend.key.width = unit(2, "lines"),
+      legend.position = "top"
+    )
+}
+
+# Generate plots
+p_breast   <- plot_prev(plot_breast_df)
+p_prostate <- plot_prev(plot_prostate_df)
+p_colon    <- plot_prev(plot_colon_df)
+p_other    <- plot_prev(plot_other_df)
+
+# Save
+ggsave("Fig_Breast_vs_NoCancer.png",   p_breast,   width = 6.5, height = 4.5, units = "in", dpi = 1200)
+ggsave("Fig_Prostate_vs_NoCancer.png", p_prostate, width = 6.5, height = 4.5, units = "in", dpi = 1200)
+ggsave("Fig_Colon_vs_NoCancer.png",    p_colon,    width = 6.5, height = 4.5, units = "in", dpi = 1200)
+ggsave("Fig_Other_vs_NoCancer.png",    p_other,    width = 6.5, height = 4.5, units = "in", dpi = 1200)
+```
+
+
+```{r}
+
+# These figures are included in the manuscript as Supplemental Figure 2.
+
+p_breast  
+p_prostate 
+p_colon
+p_other
+```
+
+
+# Supplemental data checks and flow-diagram counts
+
+```{r}
+
+# Sample derivation for the cancer type analytic dataset
+
+# Summarize sequential exclusions used to create the complete-case analytic dataset
+# for cancer type comparisons.
+
+tibble::tibble(
+  step = c(
+    "Adults in pooled BRFSS dataset from states administering the optional cancer type module, 2018–2024",
+    "Excluded: respondents with a cancer history but missing cancer type",
+    "Excluded: missing physical activity, covariates, or survey design variables",
+    "Final analytic dataset"
+  ),
+  n = c(
+    nrow(BRFSS_t),
+    nrow(BRFSS_t) -
+      nrow(BRFSS_t %>% dplyr::filter(!(cancer_history == "Yes" & is.na(cancer_type)))),
+    nrow(BRFSS_t %>% dplyr::filter(!(cancer_history == "Yes" & is.na(cancer_type)))) -
+      nrow(
+        BRFSS_t %>%
+          dplyr::filter(!(cancer_history == "Yes" & is.na(cancer_type))) %>%
+          tidyr::drop_na(
+            physical_activity, age_categorical, sex, race_ethnicity, education,
+            insurance, PHC_provider, marital_status, smoking_status,
+            year, WEIGHT, STRATA, PSU
+          )
+      ),
+    nrow(analytic_type)
+  )
+) %>%
+  knitr::kable(caption = "Sample derivation for the cancer type analytic dataset")
+```
+
+
+
+

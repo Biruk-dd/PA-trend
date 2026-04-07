@@ -1,0 +1,925 @@
+---
+title:  "Physical Activity Trends by Cancer History in BRFSS, 2018–2024"
+author: "Biruk Demma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+ This script analyzes BRFSS 2018–2024 data to:
+ 1. Estimate survey-weighted prevalence of physical activity
+    among adults with and without a history of cancer.
+ 2. Evaluate temporal trends in physical activity prevalence using annual
+    percentage change (APC).
+ 3. Estimate adjusted prevalence differences in physical activity by cancer history.
+ 4. Conduct a secondary subanalysis of aerobic guideline adherence in 2019 and 2023.
+
+
+
+```{r}
+
+#load packages
+pacman::p_load( haven, dplyr, tidyr, tibble, ggplot2, survey, broom, gtsummary, knitr, grid)
+```
+
+
+ Read BRFSS annual files (2018–2024)
+
+ Only required variables are imported.
+ Note: variable names differ by year 
+ 
+```{r}
+
+# 2024
+
+BRFSS_2024 <- read_xpt(
+  "LLCP2024.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2",
+                 "_AGE80","_AGE_G","EDUCA","_HLTHPL2","MARITAL","PERSDOC3",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2024)
+
+
+# 2023
+
+BRFSS_2023 <- read_xpt(
+  "LLCP2023.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNC1","CNCRTYP2", "_PA150R4",
+                 "_AGE80","_AGE_G","EDUCA","_HLTHPL1","MARITAL","PERSDOC3",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2023)
+
+
+# 2022
+
+BRFSS_2022 <- read_xpt(
+  "LLCP2022.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPR1","CHCOCNC1","CNCRTYP2",
+                 "_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2022)
+
+
+# 2021
+
+BRFSS_2021 <- read_xpt(
+  "LLCP2021.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1",
+                 "_AGE80","_AGE_G","EDUCA","_HLTHPLN","MARITAL","PERSDOC3",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2021)
+
+
+# 2020
+
+BRFSS_2020 <- read_xpt(
+  "LLCP2020.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACEPRV","CHCOCNCR","CNCRTYP1",
+                 "_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2020)
+
+
+# 2019
+
+BRFSS_2019 <- read_xpt(
+  "LLCP2019.XPT",
+  col_select = c("_STATE","SEXVAR","EXERANY2","_RACE","CHCOCNCR","CNCRTYP1", "_PA150R3",
+                 "_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2019)
+
+
+# 2018
+
+BRFSS_2018 <- read_xpt(
+  "LLCP2018.XPT",
+  col_select = c("_STATE","SEX1","EXERANY2","_RACE","CHCOCNCR","CNCRTYP1",
+                 "_AGE80","_AGE_G","EDUCA","HLTHPLN1","MARITAL","PERSDOC2",
+                 "_RFSMOK3","_LLCPWT","_STSTR","_PSU")
+) %>% mutate(year = 2018)
+```
+
+
+
+```{r}
+
+BRFSS <- bind_rows(BRFSS_2018, BRFSS_2019, BRFSS_2020, BRFSS_2021, 
+                   BRFSS_2022, BRFSS_2023, BRFSS_2024)
+
+# Remove yearly files after stacking to reduce memory use
+rm(BRFSS_2018, BRFSS_2019, BRFSS_2020, BRFSS_2021,
+  BRFSS_2022, BRFSS_2023, BRFSS_2024)
+```
+
+
+
+```{r}
+
+# Harmonize analysis variables across BRFSS survey years.
+# This step creates consistent variables for:
+# - state
+# - sex
+# - age and age group
+# - race/ethnicity
+# - education
+# - insurance
+# - personal health care provider
+# - marital status
+# - smoking status
+# - physical activity
+# - aerobic guideline adherence (2019 and 2023 only)
+# - cancer history
+
+
+
+BRFSS <- BRFSS %>%
+  dplyr::mutate(
+    
+    # State
+    State = dplyr::case_when(
+      `_STATE` == 1  ~ "Alabama",
+      `_STATE` == 2  ~ "Alaska",
+      `_STATE` == 4  ~ "Arizona",
+      `_STATE` == 5  ~ "Arkansas",
+      `_STATE` == 6  ~ "California",
+      `_STATE` == 8  ~ "Colorado",
+      `_STATE` == 9  ~ "Connecticut",
+      `_STATE` == 10 ~ "Delaware",
+      `_STATE` == 11 ~ "District of Columbia",
+      `_STATE` == 12 ~ "Florida",
+      `_STATE` == 13 ~ "Georgia",
+      `_STATE` == 15 ~ "Hawaii",
+      `_STATE` == 16 ~ "Idaho",
+      `_STATE` == 17 ~ "Illinois",
+      `_STATE` == 18 ~ "Indiana",
+      `_STATE` == 19 ~ "Iowa",
+      `_STATE` == 20 ~ "Kansas",
+      `_STATE` == 21 ~ "Kentucky",
+      `_STATE` == 22 ~ "Louisiana",
+      `_STATE` == 23 ~ "Maine",
+      `_STATE` == 24 ~ "Maryland",
+      `_STATE` == 25 ~ "Massachusetts",
+      `_STATE` == 26 ~ "Michigan",
+      `_STATE` == 27 ~ "Minnesota",
+      `_STATE` == 28 ~ "Mississippi",
+      `_STATE` == 29 ~ "Missouri",
+      `_STATE` == 30 ~ "Montana",
+      `_STATE` == 31 ~ "Nebraska",
+      `_STATE` == 32 ~ "Nevada",
+      `_STATE` == 33 ~ "New Hampshire",
+      `_STATE` == 34 ~ "New Jersey",
+      `_STATE` == 35 ~ "New Mexico",
+      `_STATE` == 36 ~ "New York",
+      `_STATE` == 37 ~ "North Carolina",
+      `_STATE` == 38 ~ "North Dakota",
+      `_STATE` == 39 ~ "Ohio",
+      `_STATE` == 40 ~ "Oklahoma",
+      `_STATE` == 41 ~ "Oregon",
+      `_STATE` == 42 ~ "Pennsylvania",
+      `_STATE` == 44 ~ "Rhode Island",
+      `_STATE` == 45 ~ "South Carolina",
+      `_STATE` == 46 ~ "South Dakota",
+      `_STATE` == 47 ~ "Tennessee",
+      `_STATE` == 48 ~ "Texas",
+      `_STATE` == 49 ~ "Utah",
+      `_STATE` == 50 ~ "Vermont",
+      `_STATE` == 51 ~ "Virginia",
+      `_STATE` == 53 ~ "Washington",
+      `_STATE` == 54 ~ "West Virginia",
+      `_STATE` == 55 ~ "Wisconsin",
+      `_STATE` == 56 ~ "Wyoming",
+      `_STATE` == 60 ~ "American Samoa",
+      `_STATE` == 66 ~ "Guam",
+      `_STATE` == 69 ~ "Northern Mariana Islands",
+      `_STATE` == 72 ~ "Puerto Rico",
+      `_STATE` == 78 ~ "U.S. Virgin Islands",
+      TRUE ~ NA_character_
+    ),
+
+    
+    # Sex
+    sex = dplyr::case_when(
+      year == 2018 & SEX1   == 1 ~ "Male",
+      year == 2018 & SEX1   == 2 ~ "Female",
+      year >= 2019 & SEXVAR == 1 ~ "Male",
+      year >= 2019 & SEXVAR == 2 ~ "Female",
+      TRUE ~ NA_character_
+    ),
+    sex = factor(sex, levels = c("Male", "Female")),
+
+    
+    # Age
+    age = `_AGE80`,
+    age_categorical = cut(
+      `_AGE80`,
+      breaks = c(-Inf, 49, 59, 69, 79, Inf),
+      labels = c("<50", "50–59", "60–69", "70–79", "80+"),
+      right = TRUE
+    ),
+    age_categorical = factor(
+      age_categorical,
+      levels = c("<50", "50–59", "60–69", "70–79", "80+"),
+      ordered = TRUE
+    ),
+
+    
+    # Race / Ethnicity
+    race_source = dplyr::case_when(
+      !is.na(`_RACE`)    ~ "RACE",
+      !is.na(`_RACEPRV`) ~ "RACEPRV",
+      !is.na(`_RACEPR1`) ~ "RACEPR1",
+      TRUE ~ NA_character_
+    ),
+    race_code = dplyr::case_when(
+      race_source == "RACE"    ~ as.character(`_RACE`),
+      race_source == "RACEPRV" ~ as.character(`_RACEPRV`),
+      race_source == "RACEPR1" ~ as.character(`_RACEPR1`),
+      TRUE ~ NA_character_
+    ),
+    race_ethnicity = dplyr::case_when(
+      race_code == "1" ~ "Non-Hispanic White",
+      race_code == "2" ~ "Non-Hispanic Black",
+      race_code == "3" ~ "Non-Hispanic American Indian/Alaska Native",
+      race_code == "4" ~ "Non-Hispanic Asian",
+      race_code == "5" ~ "Non-Hispanic Asian Pacific Islander",
+
+      # Multiracial Logic:
+      race_source %in% c("RACE", "RACEPRV") & race_code %in% c("6", "7") ~ "Non-Hispanic Other/Multiracial",
+      race_source == "RACEPR1" & race_code == "6"                        ~ "Non-Hispanic Other/Multiracial",
+
+      # Hispanic Logic:
+      race_source %in% c("RACE", "RACEPRV") & race_code == "8" ~ "Hispanic",
+      race_source == "RACEPR1" & race_code == "7"              ~ "Hispanic",
+
+      TRUE ~ NA_character_
+    ),
+    race_ethnicity = factor(
+      race_ethnicity,
+      levels = c(
+        "Non-Hispanic White",
+        "Non-Hispanic Black",
+        "Non-Hispanic American Indian/Alaska Native",
+        "Non-Hispanic Asian",
+        "Non-Hispanic Asian Pacific Islander",
+        "Non-Hispanic Other/Multiracial",
+        "Hispanic"
+      )
+    ),
+
+    
+    # Education
+    education = dplyr::case_when(
+      EDUCA %in% c(1, 2, 3) ~ "Less than high school",
+      EDUCA == 4            ~ "High school or GED",
+      EDUCA == 5            ~ "Some college",
+      EDUCA == 6            ~ "College or more",
+      TRUE ~ NA_character_
+    ),
+    education = factor(
+      education,
+      levels = c("Less than high school", "High school or GED", "Some college", "College or more")
+    ),
+
+    
+    # Insurance
+    insurance_raw = dplyr::coalesce(`_HLTHPL2`, `_HLTHPL1`, `_HLTHPLN`, HLTHPLN1),
+    insurance = dplyr::case_when(
+      insurance_raw == 1 ~ "Insured",
+      insurance_raw == 2 ~ "No insurance",
+      TRUE ~ NA_character_
+    ),
+    insurance = factor(insurance, levels = c("Insured", "No insurance")),
+
+    
+    # Personal Health Care Provider
+    PHC_provider = dplyr::case_when(
+      year %in% 2018:2020 & PERSDOC2 %in% c(1, 2) ~ "Yes",
+      year %in% 2018:2020 & PERSDOC2 == 3         ~ "No",
+      year %in% 2021:2024 & PERSDOC3 %in% c(1, 2) ~ "Yes",
+      year %in% 2021:2024 & PERSDOC3 == 3         ~ "No",
+      TRUE ~ NA_character_
+    ),
+    PHC_provider = factor(PHC_provider, levels = c("Yes", "No")),
+
+   
+    # Marital status
+    marital_status = dplyr::case_when(
+      MARITAL == 1              ~ "Married",
+      MARITAL %in% c(2, 3, 4, 5, 6) ~ "Unmarried",
+      TRUE ~ NA_character_
+    ),
+    marital_status = factor(marital_status, levels = c("Married", "Unmarried")),
+
+    
+    # Smoking status
+    smoking_status = dplyr::case_when(
+      `_RFSMOK3` == 2 ~ "Current smoker",
+      `_RFSMOK3` == 1 ~ "Not current smoker",
+      TRUE ~ NA_character_
+    ),
+    smoking_status = factor(smoking_status, levels = c("Current smoker", "Not current smoker")),
+
+   
+     # Physical activity
+    physical_activity = dplyr::case_when(
+      EXERANY2 %in% c(7, 9) ~ NA_real_,
+      EXERANY2 == 1 ~ 1,
+      EXERANY2 == 2 ~ 0,
+      TRUE ~ NA_real_
+    ),
+
+    
+    # Aerobic physical activity guideline adherence (2019 & 2023 Only)
+    aerobic_guideline = dplyr::case_when(
+      year == 2019 & `_PA150R3` == 1           ~ "Met guidelines",
+      year == 2019 & `_PA150R3` %in% c(2, 3)   ~ "Did not meet",
+      year == 2023 & `_PA150R4` == 1           ~ "Met guidelines",
+      year == 2023 & `_PA150R4` %in% c(2, 3)   ~ "Did not meet",
+      TRUE ~ NA_character_
+    ),
+    aerobic_guideline = factor(aerobic_guideline, levels = c("Did not meet", "Met guidelines")),
+
+   
+    # Cancer history
+    # Convert 7 (Don't know) and 9 (Refused) to NA
+    
+    CHCOCNCR = dplyr::if_else(CHCOCNCR %in% c(7, 9), NA_real_, CHCOCNCR),
+    CHCOCNC1 = dplyr::if_else(CHCOCNC1 %in% c(7, 9), NA_real_, CHCOCNC1),
+
+    cancer_history = dplyr::case_when(
+      year %in% 2018:2021 & CHCOCNCR == 1 ~ "Yes",
+      year %in% 2018:2021 & CHCOCNCR == 2 ~ "No",
+      year %in% 2022:2024 & CHCOCNC1 == 1 ~ "Yes",
+      year %in% 2022:2024 & CHCOCNC1 == 2 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    cancer_history = factor(cancer_history, levels = c("No", "Yes"))
+  ) %>%
+  
+  
+  # Rename survey design variables for consistency across analyses
+  dplyr::rename(
+    PSU    = `_PSU`,
+    STRATA = `_STSTR`,
+    WEIGHT = `_LLCPWT`
+  ) %>%
+  # Drop helper columns
+  dplyr::select(-race_source, -race_code, -insurance_raw)
+```
+
+
+ Missingness assessment
+ Summarize missingness in the outcome, exposure, covariates, and survey design variables.
+
+```{r}
+
+# Summarize missingness in the outcome, exposure, covariates, and survey design variables.
+# (Supplementary table 3A)
+
+tibble::tibble(
+  Variable = c(
+    "Smoking status",
+    "Insurance",
+    "Marital status",
+    "Personal health care provider",
+    "Education",
+    "Physical activity",
+    "Race/Ethnicity",
+    "Sex",
+    "Cancer history",
+    "Age group",
+    "Year",
+    "WEIGHT",
+    "STRATA",
+    "PSU"
+  ),
+  Total_n = nrow(BRFSS),
+  N_missing = c(
+    sum(is.na(BRFSS$smoking_status)),
+    sum(is.na(BRFSS$insurance)),
+    sum(is.na(BRFSS$marital_status)),
+    sum(is.na(BRFSS$PHC_provider)),
+    sum(is.na(BRFSS$education)),
+    sum(is.na(BRFSS$physical_activity)),
+    sum(is.na(BRFSS$race_ethnicity)),
+    sum(is.na(BRFSS$sex)),
+    sum(is.na(BRFSS$cancer_history)),
+    sum(is.na(BRFSS$age_categorical)),
+    sum(is.na(BRFSS$year)),
+    sum(is.na(BRFSS$WEIGHT)),
+    sum(is.na(BRFSS$STRATA)),
+    sum(is.na(BRFSS$PSU))
+  )
+) %>%
+  dplyr::mutate(
+    pct_missing = round(100 * N_missing / Total_n, 2)
+  ) %>%
+  dplyr::arrange(dplyr::desc(pct_missing))
+```
+
+
+
+```{r}
+
+# Missingness in key variables by survey year
+
+missing_by_year <- BRFSS %>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(
+    total = dplyr::n(),
+    missing_physical_activity = sum(is.na(physical_activity)),
+    percent_missing_physical_activity = round(100 * missing_physical_activity / total, 2),
+    missing_cancer_history = sum(is.na(cancer_history)),
+    percent_missing_cancer_history = round(100 * missing_cancer_history / total, 2),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(year)
+
+missing_by_year
+```
+
+
+```{r}
+
+# State-level missingness in key variables for 2019 (diagnostic check)
+
+missing_by_state_2019 <- BRFSS %>%
+  dplyr::filter(year == 2019) %>%
+  dplyr::group_by(State) %>%
+  dplyr::summarise(
+    total = dplyr::n(),
+    missing_physical_activity = sum(is.na(physical_activity)),
+    percent_missing_physical_activity = round(100 * missing_physical_activity / total, 2),
+    missing_cancer_history = sum(is.na(cancer_history)),
+    percent_missing_cancer_history = round(100 * missing_cancer_history / total, 2),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(dplyr::desc(percent_missing_physical_activity))
+missing_by_state_2019
+```
+
+
+
+ Create complete-case analytic dataset for the main cancer history analysis.
+ This dataset includes the outcome, exposure, covariates, and survey design variables.
+
+```{r}
+
+analytic_main <- BRFSS %>%
+  tidyr::drop_na(
+    physical_activity, cancer_history, age_categorical, sex, race_ethnicity,
+    education, insurance, PHC_provider, marital_status, smoking_status, 
+    year, WEIGHT, STRATA, PSU
+  ) %>%
+  mutate(
+    year = factor(year, levels = 2018:2024),
+    
+    # Create unique strata IDs
+    
+    # BRFSS strata and PSU codes are assigned independently each year, so the same
+    # numeric code can appear across years but refer to different design elements.
+    # Interacting year with STRATA and PSU creates unique identifiers that prevent
+    # the survey package from incorrectly treating codes from different years as the
+    # same stratum or PSU in the pooled design.
+    
+    unique_strata = interaction(year, STRATA),
+    unique_psu    = interaction(year, PSU)
+  )
+
+options(survey.lonely.psu = "adjust")
+
+# Create pooled survey design object for the main analysis.
+
+design_main <- svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata, 
+  weights = ~WEIGHT,
+  data    = analytic_main,
+  nest    = TRUE
+)
+
+```
+
+
+# Survey-weighted prevalence and trends
+
+```{r}
+
+# Estimate annual survey-weighted prevalence of physical activity by cancer history.
+
+prev_trend_cc <- svyby(
+  ~physical_activity,
+  ~year + cancer_history,
+  design_main,
+  svymean,
+  na.rm   = TRUE,
+  vartype = c("ci")
+) %>%
+  dplyr::mutate(                              
+    prevalence_pct = round(physical_activity * 100, 1),
+    ci_low_pct     = round(ci_l * 100, 1),
+    ci_high_pct    = round(ci_u * 100, 1)
+  )
+
+prev_trend_cc
+```
+
+
+```{r}
+
+# Add numeric survey year for plotting and trend models.
+
+prev_trend_cc <- prev_trend_cc %>%
+  dplyr::mutate(year_num = as.numeric(as.character(year)))
+```
+
+
+```{r}
+
+# Create formatted table of annual weighted prevalence by cancer history.
+# Output included in supplementary table 4.
+
+table_prev_cc <- prev_trend_cc %>%
+  mutate(
+    pa_ci = paste0(
+      round(prevalence_pct, 1), "% (",
+      round(ci_low_pct, 1), "–",
+      round(ci_high_pct, 1), "%)"
+    )
+  ) %>%
+  select(year, cancer_history, pa_ci) %>%
+  pivot_wider(                                                                           
+    names_from  = year,
+    values_from = pa_ci
+  ) %>%
+  arrange(match(cancer_history, c("Yes", "No"))) %>%
+  rename(`Cancer history` = cancer_history)
+
+table_prev_cc %>%
+  kable(
+    caption = "Weighted prevalence of physical activity (%) by cancer history and survey year, BRFSS 2018–2024"
+  )
+table_prev_cc
+```
+
+
+ Estimate annual percentage change (APC) in physical activity prevalence
+ separately for adults with and without a cancer history
+ 
+```{r}
+
+# Output included in table 2.
+
+trend_yes <- prev_trend_cc %>% dplyr::filter(cancer_history == "Yes")
+trend_no  <- prev_trend_cc %>% dplyr::filter(cancer_history == "No")
+
+
+lm_log_yes <- lm(log(physical_activity) ~ year_num, data = trend_yes)
+lm_log_no  <- lm(log(physical_activity) ~ year_num, data = trend_no)
+
+# Extract APC with 95% CIs
+apc_results <- dplyr::bind_rows(
+  broom::tidy(lm_log_yes, conf.int = TRUE) %>%
+    dplyr::filter(term == "year_num") %>%
+    dplyr::mutate(group = "Cancer history: Yes"),
+  broom::tidy(lm_log_no, conf.int = TRUE) %>%
+    dplyr::filter(term == "year_num") %>%
+    dplyr::mutate(group = "Cancer history: No")
+) %>%
+  dplyr::transmute(
+    group,
+    APC_pct     = round((exp(estimate) - 1) * 100, 2),
+    ci_low_pct  = round((exp(conf.low) - 1) * 100, 2),
+    ci_high_pct = round((exp(conf.high) - 1) * 100, 2),
+    p_value     = p.value
+  )
+
+apc_results
+```
+
+
+ Estimate the adjusted prevalence difference in physical activity
+ between adults with and without a cancer history
+ 
+```{r}
+# aPD model
+lpm_overall <- survey::svyglm(
+  physical_activity ~ cancer_history +
+    age_categorical + sex + race_ethnicity +
+    education + insurance + PHC_provider +
+    marital_status + smoking_status + year,
+  design = design_main,
+  family = gaussian(link = "identity")
+)
+
+# Extract aPD
+rd_overall <- broom::tidy(lpm_overall, conf.int = TRUE) %>%
+  dplyr::filter(term == "cancer_historyYes") %>%
+  dplyr::transmute(
+    comparison = "Cancer history: Yes vs No",
+    aPD_pp     = round(estimate * 100, 1),
+    ci_low_pp  = round(conf.low * 100, 1),
+    ci_high_pp = round(conf.high * 100, 1),
+    p_value    = p.value
+  )
+rd_overall
+```
+
+
+ Create the main figure showing annual weighted prevalence of 
+ physical activity by cancer history.
+
+```{r}
+
+# Output included on manuscript as figure 1.
+
+prev_trend_cc <- prev_trend_cc %>%
+  dplyr::mutate(
+    year_num = as.numeric(as.character(year)),
+    cancer_history = factor(cancer_history, levels = c("Yes", "No"))
+  )
+
+gg_pa_trend <- ggplot(
+  prev_trend_cc,
+  aes(
+    x = year_num,
+    y = prevalence_pct,
+    group = cancer_history,
+    linetype = cancer_history,
+    shape = cancer_history
+  )
+) +
+  geom_errorbar(
+    aes(ymin = ci_low_pct, ymax = ci_high_pct),
+    width = 0.15,
+    linewidth = 0.45
+  ) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.5, fill = "white", stroke = 0.8) +
+  scale_x_continuous(breaks = 2018:2024) +
+  scale_y_continuous(
+    limits = c(0, 100),
+    breaks = seq(0, 100, 10),
+    expand = expansion(mult = c(0, 0.02)),
+    name = "Weighted prevalence of PA (%)"
+  ) +
+  scale_linetype_manual(
+    name = "Cancer history",
+    values = c("No" = "22", "Yes" = "solid")
+  ) +
+  scale_shape_manual(
+    name = "Cancer history",
+    values = c("No" = 17, "Yes" = 16)
+  ) +
+  labs(x = "Survey year") +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text = element_text(color = "black"),
+    legend.text = element_text(size = 11),
+    legend.key.width = unit(2, "lines"),
+    legend.position = "top"
+  )
+
+gg_pa_trend
+```
+
+
+```{r}
+ggsave(
+  filename = "Fig1_PA_trend_cancer_history.png",
+  plot     = gg_pa_trend,
+  width    = 6.5,   
+  height   = 4.5,   
+  units    = "in",
+  dpi      = 1200    
+)
+```
+
+
+
+
+```{r}
+
+# Create Table 1 showing unweighted participant characteristics by cancer history.
+
+# Recode physical activity to a labeled factor for the table
+analytic_main_tab <- analytic_main %>%
+  dplyr::mutate(
+    physical_activity = factor(
+      physical_activity,
+      levels = c(1, 0),
+      labels = c("Yes", "No")
+    )
+  )
+
+# Table 1: unweighted counts and column percentages by cancer history
+table1_main <- analytic_main_tab %>%
+  tbl_summary(
+    by        = cancer_history,
+    include   = c(physical_activity,age_categorical,sex,race_ethnicity,education,insurance,marital_status,smoking_status,PHC_provider),
+    statistic = all_categorical() ~ "{n} ({p}%)",
+    percent   = "column",
+    missing   = "ifany",
+    digits    = all_categorical() ~ 1
+  ) %>%
+  add_overall() %>%                 # Overall column
+  add_n(location = "header") %>%    # N in each column header
+  modify_header(label ~ "**Characteristic**") %>%
+  modify_caption( "**Table 1.  Unweighted sociodemographic and behavioral characteristics of adults in the analytic
+sample by self-reported cancer history, BRFSS 2018–2024**")
+
+table1_main
+```
+
+
+
+
+
+ Aerobic physical activity guideline subanalysis
+ Assess missingness and estimate weighted prevalence of meeting and not meeting
+ the aerobic guideline by cancer history in 2019 and 2023.
+
+```{r}
+
+# Summarize complete cases for the aerobic-guideline subanalysis.
+BRFSS %>%
+  dplyr::filter(year %in% c(2019, 2023)) %>%
+  summarise(
+    total_n = dplyr::n(),
+    missing_any = sum(
+      is.na(aerobic_guideline) |
+      is.na(cancer_history) |
+      is.na(WEIGHT) |
+      is.na(STRATA) |
+      is.na(PSU)
+    ),
+    complete_cases = sum(
+      !is.na(aerobic_guideline) &
+      !is.na(cancer_history) &
+      !is.na(WEIGHT) &
+      !is.na(STRATA) &
+      !is.na(PSU)
+    )
+  )
+```
+
+
+```{r}
+
+# Summarize missingness in key variables by survey year.
+BRFSS %>%
+  dplyr::filter(year %in% c(2019, 2023)) %>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(
+    total_n = dplyr::n(),
+    missing_aerobic_guideline = sum(is.na(aerobic_guideline)),
+    missing_cancer_history = sum(is.na(cancer_history)),
+    missing_WEIGHT = sum(is.na(WEIGHT)),
+    missing_STRATA = sum(is.na(STRATA)),
+    missing_PSU = sum(is.na(PSU)),
+    missing_any = sum(
+      is.na(aerobic_guideline) |
+      is.na(cancer_history) |
+      is.na(WEIGHT) |
+      is.na(STRATA) |
+      is.na(PSU)
+    )
+  )
+```
+
+
+```{r}
+
+# Create analytic dataset and survey design for the aerobic-guideline subanalysis.
+guideline_df <- BRFSS %>%
+  dplyr::filter(year %in% c(2019, 2023)) %>%
+  tidyr::drop_na(aerobic_guideline, cancer_history, WEIGHT, STRATA, PSU) %>%
+  dplyr::mutate(
+    unique_strata = interaction(year, STRATA),
+    unique_psu    = interaction(year, PSU)
+  )
+
+options(survey.lonely.psu = "adjust")
+guideline_design <- survey::svydesign(
+  ids     = ~unique_psu,
+  strata  = ~unique_strata,
+  weights = ~WEIGHT,
+  data    = guideline_df,
+  nest    = TRUE
+)
+
+guideline_prev <- survey::svyby(
+  ~aerobic_guideline,
+  ~year + cancer_history,
+  guideline_design,
+  survey::svymean,
+  vartype = "ci"
+) %>%
+  tibble::as_tibble()
+
+guideline_prev
+```
+
+
+
+```{r}
+
+# Create formatted table of aerobic guideline adherence by cancer history.
+# Output included as table 3 on the manuscript.
+
+
+guideline_table_full <- guideline_prev %>%
+  dplyr::mutate(
+    met_stats = paste0(
+      round(`aerobic_guidelineMet guidelines` * 100, 1), "% (",
+      round(`ci_l.aerobic_guidelineMet guidelines` * 100, 1), "–",
+      round(`ci_u.aerobic_guidelineMet guidelines` * 100, 1), "%)"
+    ),
+    not_met_stats = paste0(
+      round(`aerobic_guidelineDid not meet` * 100, 1), "% (",
+      round(`ci_l.aerobic_guidelineDid not meet` * 100, 1), "–",
+      round(`ci_u.aerobic_guidelineDid not meet` * 100, 1), "%)"
+    )
+  ) %>%
+  dplyr::select(year, cancer_history, met_stats, not_met_stats) %>%
+  dplyr::arrange(year, cancer_history) %>%
+  dplyr::rename(
+    `Cancer history` = cancer_history,
+    `Met guideline (≥150 min/week)` = met_stats,
+    `Did not meet guideline (<150 min/week)` = not_met_stats
+  )
+
+knitr::kable(
+  guideline_table_full,
+  caption = "Weighted prevalence of meeting and not meeting the aerobic guideline by cancer history in 2019 and 2023"
+)
+
+guideline_table_full
+```
+
+
+ Supplemental data checks and flow-diagram counts
+
+```{r}
+
+# Discordant cancer type reports by sex
+BRFSS %>%
+  dplyr::summarise(
+    `Male respondents reporting breast cancer` = sum(
+      cancer_history == "Yes" & sex == "Male" &
+        ((year %in% 2018:2021 & CNCRTYP1 == 1) |
+         (year %in% 2022:2024 & CNCRTYP2 == 5)),
+      na.rm = TRUE
+    ),
+    `Female respondents reporting prostate cancer` = sum(
+      cancer_history == "Yes" & sex == "Female" &
+        ((year %in% 2018:2021 & CNCRTYP1 == 19) |
+         (year %in% 2022:2024 & CNCRTYP2 == 20)),
+      na.rm = TRUE
+    )
+  ) %>%
+  tidyr::pivot_longer(
+    cols = everything(),
+    names_to = "check",
+    values_to = "discordant_n"
+  ) %>%
+  knitr::kable(caption = "Discordant sex-specific cancer type reports")
+```
+
+
+
+ Sample derivation for the primary dataset 
+
+```{r}
+
+# Summarize sequential exclusions used to create the complete-case analytic dataset.
+# Output used in supplementary figure 1.
+
+tibble::tibble(
+  step = c(
+    "Adults in BRFSS 2018–2024",
+    "Excluded: missing physical activity",
+    "Excluded: missing cancer history",
+    "Excluded: missing covariates or survey design variables",
+    "Final analytic dataset"
+  ),
+  n = c(
+    nrow(BRFSS),
+    nrow(BRFSS) - nrow(BRFSS %>% dplyr::filter(!is.na(physical_activity))),
+    nrow(BRFSS %>% dplyr::filter(!is.na(physical_activity))) -
+      nrow(BRFSS %>% dplyr::filter(!is.na(physical_activity), !is.na(cancer_history))),
+    nrow(BRFSS %>% dplyr::filter(!is.na(physical_activity), !is.na(cancer_history))) -
+      nrow(analytic_main),
+    nrow(analytic_main)
+  )
+) %>%
+  knitr::kable(caption = "Sample derivation for the main cancer history analysis")
+```
+
