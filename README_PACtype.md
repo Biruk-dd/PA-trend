@@ -40,7 +40,7 @@ Only states listed in Supplementary Table 2 of the manuscript are retained durin
 | 2020 | `LLCP2020.XPT` | AZ, CT, DE, GA, GU, HI, IN, LA, MA, MI, MS, MO, MT, NJ, NM, NC, RI, SD, UT, VT, VA, WI |
 | 2020 | `LLCP20V1.XPT` | KS, ME, NE, NY, OH, OK |
 | 2020 | `LLCP20V2.XPT` | MD |
-| 2020 | `LLCP20V3.XPT` | NY *(weight rescaled — see Step 2)* |
+| 2020 | `LLCP20V3.XPT` | NY *(weight rescaled)* |
 | 2021 | `LLCP2021.XPT` | AR, DE, HI, MI, MT, NJ, NM, PR, UT, WI |
 | 2021 | `LLCP21V1.XPT` | NE, OK |
 | 2021 | `LLCP21V2.XPT` | KS |
